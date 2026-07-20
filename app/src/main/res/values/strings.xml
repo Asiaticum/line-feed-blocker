@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LINE Feed Blocker</string>
+    <string name="accessibility_service_label">LINE Feed Blocker 調査サービス</string>
+    <string name="accessibility_service_description">LINEのホーム画面と投稿領域を端末内で判定するための個人用サービスです。調査ログは明示的に有効化した場合だけ端末内へ出力します。</string>
+    <string name="screen_title">LINE Feed Blocker</string>
+    <string name="production_intro">実機調査で確認した安定ID、ホームタブの選択状態、上部ヘッダー下端、下部タブ上端を端末内だけで判定します。ホーム中央領域を全面的に隠し、判定が曖昧な場合は表示しません。</string>
+    <string name="service_status_enabled">調査サービス: 有効</string>
+    <string name="service_status_disabled">調査サービス: 無効（端末設定から手動で有効にしてください）</string>
+    <string name="open_accessibility_settings">ユーザー補助設定を開く</string>
+    <string name="enable_ui_tree_logs">UIツリー調査ログを有効にする</string>
+    <string name="request_ui_tree_dump">次のLINEイベントでUIツリーを保存・出力</string>
+    <string name="enable_logs_first">先に調査ログを有効にしてください</string>
+    <string name="open_line_prompt">LINEで対象画面を開くか、少しスクロールしてください</string>
+    <string name="log_instructions">ログ取得:\nadb logcat -c\nadb logcat -s LineFeedInspector\n\n投稿やメッセージの文字列がログに含まれる場合があります。ログは外部送信せず、調査後はチェックをオフにしてください。</string>
+    <string name="section_operation">動作</string>
+    <string name="feature_enabled">フィード非表示機能を有効にする</string>
+    <string name="emergency_stop">緊急停止</string>
+    <string name="emergency_stopped">フィード非表示機能を停止しました</string>
+    <string name="section_overlay">オーバーレイ調整</string>
+    <string name="top_offset_hint">上端補正（dp、下方向が正）</string>
+    <string name="bottom_offset_hint">下端補正（dp、下方向が正）</string>
+    <string name="horizontal_inset_hint">左右補正（dp、内側が正）</string>
+    <string name="top_offset_label">上端補正（dp、下方向が正）</string>
+    <string name="bottom_offset_label">下端補正（dp、下方向が正）</string>
+    <string name="horizontal_inset_label">左右補正（dp、内側が正）</string>
+    <string name="opacity_value">不透明度: %1$d%%</string>
+    <string name="background_color">背景色</string>
+    <string name="color_white">白</string>
+    <string name="color_black">黒</string>
+    <string name="color_gray">グレー</string>
+    <string name="touch_blocking">隠したフィードへのタッチを遮断する</string>
+    <string name="debug_border">デバッグ枠を表示する</string>
+    <string name="show_overlay_text">オーバーレイに説明文を表示する</string>
+    <string name="reset_settings">設定を初期化</string>
+    <string name="settings_reset">設定を初期化しました</string>
+    <string name="section_inspector">UI調査</string>
+    <string name="tree_status_initial">UIツリー: 未保存</string>
+    <string name="tree_status_value">UIツリー: %1$s</string>
+    <string name="overlay_label">LINEホームのコンテンツを非表示にしています</string>
+    <string name="integer_value">%1$d</string>
+    <string name="restricted_symbol">×</string>
+</resources>
