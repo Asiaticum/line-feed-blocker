@@ -66,10 +66,10 @@ class FeedDetectorTest {
         val policy = NavigationPolicyDetector.detect(navigationTree(shoppingSelected = false), screen)
 
         assertEquals(2473, policy.navigationTop)
-        assertFalse(policy.blockedTabSelected)
+        assertEquals(null, policy.selectedRestrictedTab)
         assertEquals(IntBounds(534, 2473, 726, 2728), policy.touchBlockers["shopping-tab"])
         assertEquals(IntBounds(1038, 2473, 1230, 2728), policy.touchBlockers["mini-app-tab"])
-        assertEquals(IntBounds(775, 196, 869, 290), policy.touchBlockers["agent-header"])
+        assertEquals(IntBounds(775, 196, 869, 290), policy.touchBlockers["friends-header"])
         assertEquals(IntBounds(1107, 319, 1215, 427), policy.touchBlockers["agent-floating"])
         assertEquals(IntBounds(0, 963, 1260, 1167), policy.touchBlockers["agent-conversation"])
         assertEquals(IntBounds(0, 438, 1260, 774), policy.touchBlockers["talk-promoted"])
@@ -79,7 +79,29 @@ class FeedDetectorTest {
     fun marksBlockedTabWhenShoppingIsAlreadySelected() {
         val policy = NavigationPolicyDetector.detect(navigationTree(shoppingSelected = true), screen)
 
-        assertTrue(policy.blockedTabSelected)
+        assertEquals("shopping-tab", policy.selectedRestrictedTab)
+    }
+
+    @Test
+    fun keepsTalkHeaderTargetsFixedWhenPromotedAreaDisappears() {
+        val withPromotion = NavigationPolicyDetector.detect(navigationTree(talkListTop = 774), screen)
+        val afterScroll = NavigationPolicyDetector.detect(navigationTree(talkListTop = 438), screen)
+
+        assertEquals(withPromotion.touchBlockers["friends-header"], afterScroll.touchBlockers["friends-header"])
+        assertEquals(withPromotion.touchBlockers["agent-floating"], afterScroll.touchBlockers["agent-floating"])
+        assertTrue("talk-promoted" in withPromotion.touchBlockers)
+        assertFalse("talk-promoted" in afterScroll.touchBlockers)
+    }
+
+    @Test
+    fun keepsFriendsFixedAndRemovesAgentWhenSearchBarIsHidden() {
+        val visible = NavigationPolicyDetector.detect(navigationTree(searchVisible = true), screen)
+        val collapsed = NavigationPolicyDetector.detect(navigationTree(searchVisible = false), screen)
+
+        assertEquals(visible.touchBlockers["friends-header"], collapsed.touchBlockers["friends-header"])
+        assertTrue("agent-floating" in visible.touchBlockers)
+        assertFalse("agent-floating" in collapsed.touchBlockers)
+        assertFalse("talk-promoted" in collapsed.touchBlockers)
     }
 
     private fun homeTree(
@@ -124,7 +146,11 @@ class FeedDetectorTest {
         ),
     )
 
-    private fun navigationTree(shoppingSelected: Boolean) = node(
+    private fun navigationTree(
+        shoppingSelected: Boolean = false,
+        talkListTop: Int = 774,
+        searchVisible: Boolean = true,
+    ) = node(
         bounds = screen,
         children = listOf(
             node(
@@ -133,9 +159,13 @@ class FeedDetectorTest {
                 children = listOf(
                     node(bounds = IntBounds(765, 171, 879, 315), clickable = true),
                     node(bounds = IntBounds(879, 171, 993, 315), clickable = true),
-                    node(bounds = IntBounds(48, 309, 1089, 438), clickable = true),
+                    node(
+                        bounds = IntBounds(48, 309, 1089, 438),
+                        clickable = true,
+                        visible = searchVisible,
+                    ),
                     node(bounds = IntBounds(1089, 309, 1233, 438), clickable = true),
-                    node(bounds = IntBounds(0, 774, 1260, 2581), scrollable = true),
+                    node(bounds = IntBounds(0, talkListTop, 1260, 2581), scrollable = true),
                     node(
                         bounds = IntBounds(0, 963, 1260, 1167),
                         clickable = true,
@@ -175,5 +205,16 @@ class FeedDetectorTest {
         children: List<UiNodeSnapshot> = emptyList(),
         clickable: Boolean = false,
         text: String? = null,
-    ) = UiNodeSnapshot(className, id, bounds, selected, scrollable, clickable, children, text)
+        visible: Boolean = true,
+    ) = UiNodeSnapshot(
+        className = className,
+        viewId = id,
+        bounds = bounds,
+        selected = selected,
+        scrollable = scrollable,
+        clickable = clickable,
+        children = children,
+        text = text,
+        visible = visible,
+    )
 }

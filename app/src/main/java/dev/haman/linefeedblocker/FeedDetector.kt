@@ -23,6 +23,7 @@ data class UiNodeSnapshot(
     val children: List<UiNodeSnapshot>,
     val text: String? = null,
     val contentDescription: String? = null,
+    val visible: Boolean = true,
 ) {
     fun descendantsAndSelf(): Sequence<UiNodeSnapshot> = sequence {
         yield(this@UiNodeSnapshot)
@@ -50,6 +51,7 @@ data class UiNodeSnapshot(
                 children = children,
                 text = node.text?.toString(),
                 contentDescription = node.contentDescription?.toString(),
+                visible = node.isVisibleToUser,
             )
         }
     }
@@ -57,7 +59,7 @@ data class UiNodeSnapshot(
 
 data class NavigationPolicy(
     val navigationTop: Int?,
-    val blockedTabSelected: Boolean,
+    val selectedRestrictedTab: String?,
     val touchBlockers: Map<String, IntBounds>,
 )
 
@@ -71,18 +73,27 @@ object NavigationPolicyDetector {
     fun detect(root: UiNodeSnapshot, screen: IntBounds): NavigationPolicy {
         val nodes = root.descendantsAndSelf().toList()
         if (nodes.none { it.viewId == APP_ROOT_ID }) {
-            return NavigationPolicy(null, false, emptyMap())
+            return NavigationPolicy(null, null, emptyMap())
         }
         val navigation = nodes.firstOrNull { it.viewId == NAV_CONTAINER_ID }
-            ?: return NavigationPolicy(null, false, emptyMap())
+            ?: return NavigationPolicy(null, null, emptyMap())
         val shopping = nodes.firstOrNull { it.viewId == SHOPPING_ID }
         val miniApp = nodes.firstOrNull { it.viewId == MINI_APP_ID }
         val talk = nodes.firstOrNull { it.viewId == TALK_ID }
         val talkSelected = talk?.containsSelectedDescendant() == true
         val talkSearchBar = if (talkSelected) {
-            nodes.asSequence()
-                .filter { it.clickable && it.className == "android.view.View" }
+            val searchLabelCandidate = nodes.asSequence()
+                .filter { it.visible && it.clickable && it.className == "android.view.View" }
                 .filter { it.bounds.width >= screen.width * 0.70 }
+                .filter { candidate ->
+                    candidate.descendantsAndSelf().any {
+                        it.text?.trim() == "検索" || it.contentDescription?.trim() == "検索"
+                    }
+                }
+                .maxByOrNull { it.bounds.width }
+            searchLabelCandidate ?: nodes.asSequence()
+                .filter { it.visible && it.clickable && it.className == "android.view.View" }
+                .filter { it.bounds.width in (screen.width * 0.70).toInt()..(screen.width * 0.90).toInt() }
                 .filter { it.bounds.top in (screen.top + (screen.height * 0.08).toInt())..(screen.top + (screen.height * 0.16).toInt()) }
                 .filter { it.bounds.height <= screen.height * 0.08 }
                 .maxByOrNull { it.bounds.width }
@@ -93,34 +104,44 @@ object NavigationPolicyDetector {
         shopping?.let { blockers["shopping-tab"] = it.bounds }
         miniApp?.let { blockers["mini-app-tab"] = it.bounds }
 
-        val headerAgent = nodes.asSequence()
+        val headerAgent = if (!talkSelected) nodes.asSequence()
             .filter { it.clickable && it.className == "android.view.View" }
-            .filter { it.bounds.left in (screen.left + (screen.width * 0.55).toInt())..(screen.left + (screen.width * 0.75).toInt()) }
-            .filter { it.bounds.top in (screen.top + (screen.height * 0.05).toInt())..(screen.top + (screen.height * 0.13).toInt()) }
-            .filter { it.bounds.width in (screen.width * 0.06).toInt()..(screen.width * 0.15).toInt() }
-            .minByOrNull { it.bounds.left }
+            .filter { candidate ->
+                candidate.descendantsAndSelf().any {
+                    it.text?.trim() == AGENT_LABEL || it.contentDescription?.trim() == AGENT_LABEL
+                }
+            }
+            .filter { it.bounds.left >= screen.left && it.bounds.right <= screen.right }
+            .minByOrNull { it.bounds.top }
+        else null
         headerAgent?.let {
             blockers["agent-header"] = centeredSquare(it.bounds, (screen.width * 0.075).toInt(), screen)
         }
 
-        val floatingAgent = talkSearchBar?.let { searchBar ->
-            nodes.asSequence()
-                .filter { it.clickable && it.className == "android.view.View" }
-                .filter { it.bounds.left >= searchBar.bounds.right }
-                .filter { kotlin.math.abs(it.bounds.top - searchBar.bounds.top) <= 2 }
-                .filter { kotlin.math.abs(it.bounds.bottom - searchBar.bounds.bottom) <= 2 }
-                .minByOrNull { it.bounds.left }
+        if (talkSelected) {
+            blockers["friends-header"] = centeredSquareAt(
+                screen.left + (screen.width * 0.653).toInt(),
+                screen.top + (screen.height * 0.087).toInt(),
+                (screen.width * 0.075).toInt(),
+                screen,
+            )
         }
-        floatingAgent?.let {
-            blockers["agent-floating"] = centeredSquare(it.bounds, (screen.width * 0.086).toInt(), screen)
+
+        talkSearchBar?.let {
+            blockers["agent-floating"] = centeredSquareAt(
+                screen.left + (screen.width * 0.9215).toInt(),
+                screen.top + (screen.height * 0.1335).toInt(),
+                (screen.width * 0.086).toInt(),
+                screen,
+            )
         }
 
         val agentConversation = nodes.asSequence()
-            .filter { it.clickable && it.bounds.width >= screen.width * 0.90 }
+            .filter { it.visible && it.clickable && it.bounds.width >= screen.width * 0.90 }
             .filter { it.bounds.height in (screen.height * 0.04).toInt()..(screen.height * 0.12).toInt() }
             .filter { candidate ->
                 candidate.descendantsAndSelf().any {
-                    it.text?.trim() == "Agent i" || it.contentDescription?.trim() == "Agent i"
+                    it.text?.trim() == AGENT_LABEL || it.contentDescription?.trim() == AGENT_LABEL
                 }
             }
             .firstOrNull()
@@ -129,28 +150,42 @@ object NavigationPolicyDetector {
         if (talkSelected) {
             val searchBar = talkSearchBar
             val talkList = nodes.asSequence()
-                .filter { it.scrollable && it.className == "android.view.View" }
+                .filter { it.visible && it.scrollable && it.className == "android.view.View" }
                 .filter { it.bounds.width >= screen.width * 0.90 }
                 .filter { it.bounds.top >= (searchBar?.bounds?.bottom ?: 0) }
                 .filter { it.bounds.top < navigation.bounds.top }
                 .minByOrNull { it.bounds.top }
+            val minimumPromotedHeight = (screen.height * 0.10).toInt()
             if (searchBar != null && talkList != null &&
-                talkList.bounds.top - searchBar.bounds.bottom >= screen.height * 0.05
+                talkList.bounds.top - searchBar.bounds.bottom >= minimumPromotedHeight
             ) {
                 blockers["talk-promoted"] = IntBounds(
                     screen.left,
                     searchBar.bounds.bottom,
                     screen.right,
-                    talkList.bounds.top,
+                    (searchBar.bounds.bottom + (screen.height * 0.12).toInt())
+                        .coerceAtMost(talkList.bounds.top),
                 )
             }
         }
 
+        val selectedRestrictedTab = when {
+            shopping?.containsSelectedDescendant() == true -> "shopping-tab"
+            miniApp?.containsSelectedDescendant() == true -> "mini-app-tab"
+            else -> null
+        }
+
         return NavigationPolicy(
             navigationTop = navigation.bounds.top,
-            blockedTabSelected = listOfNotNull(shopping, miniApp).any(UiNodeSnapshot::containsSelectedDescendant),
+            selectedRestrictedTab = selectedRestrictedTab,
             touchBlockers = blockers,
         )
+    }
+
+    private fun centeredSquareAt(centerX: Int, centerY: Int, size: Int, screen: IntBounds): IntBounds {
+        val left = (centerX - size / 2).coerceIn(screen.left, screen.right - size)
+        val top = (centerY - size / 2).coerceIn(screen.top, screen.bottom - size)
+        return IntBounds(left, top, left + size, top + size)
     }
 
     private fun centeredSquare(bounds: IntBounds, requestedSize: Int, screen: IntBounds): IntBounds {
@@ -161,6 +196,8 @@ object NavigationPolicyDetector {
         val top = (centerY - size / 2).coerceIn(screen.top, screen.bottom - size)
         return IntBounds(left, top, left + size, top + size)
     }
+
+    private const val AGENT_LABEL = "Agent i"
 }
 
 data class FeedDetection(

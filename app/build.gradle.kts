@@ -11,8 +11,8 @@ android {
         applicationId = "dev.haman.linefeedblocker"
         minSdk = 28
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.7.2-debug"
+        versionCode = 21
+        versionName = "0.10.0-debug"
     }
 
     buildTypes {

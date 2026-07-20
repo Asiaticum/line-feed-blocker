@@ -27,6 +27,7 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
     private var lastEvaluationUptimeMs = 0L
     private var lastKnownHomeBounds: IntBounds? = null
     private var dumpRunnable: Runnable? = null
+    private var scrollSettleRunnable: Runnable? = null
 
     private val watchdog = object : Runnable {
         override fun run() {
@@ -86,7 +87,14 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 handleFastTabClick(event)
             }
-            scheduleEvaluation("event:${AccessibilityEvent.eventTypeToString(event.eventType)}")
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+                if (::touchBlockerController.isInitialized) {
+                    touchBlockerController.hide("talk-promoted")
+                }
+                scheduleScrollSettleEvaluation()
+            } else {
+                scheduleEvaluation("event:${AccessibilityEvent.eventTypeToString(event.eventType)}")
+            }
         } catch (error: Throwable) {
             cancelEvaluation()
             cancelPendingDump()
@@ -102,7 +110,7 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        if (key !in InspectorPreferences.operationalKeys) return
+        if (!InspectorPreferences.isOperationalKey(key)) return
         if (!InspectorPreferences.overlaySettings(this).enabled) {
             hideOverlay("feature-disabled")
         } else {
@@ -169,18 +177,20 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             val screen = currentScreenBounds()
             val snapshot = UiNodeSnapshot.from(root)
             val policy = NavigationPolicyDetector.detect(snapshot, screen)
-            touchBlockerController.sync(policy.touchBlockers, settings)
+            val enabledTargets = policy.touchBlockers.filterKeys { isTargetEnabled(it, settings) }
+            touchBlockerController.sync(enabledTargets, settings)
             val detection = FeedDetector.detect(snapshot, screen)
             val rawBounds = when {
                 detection.overlayBounds != null -> detection.overlayBounds
-                policy.blockedTabSelected && policy.navigationTop != null ->
+                policy.selectedRestrictedTab?.let { isTargetEnabled(it, settings) } == true &&
+                    policy.navigationTop != null ->
                     IntBounds(screen.left, screen.top, screen.right, policy.navigationTop)
                 else -> null
             }
             if (rawBounds == null) {
                 hideContentOverlay(
-                    if (policy.touchBlockers.isEmpty()) detection.reason
-                    else "restricted-icons=${policy.touchBlockers.keys.joinToString()}",
+                    if (enabledTargets.isEmpty()) detection.reason
+                    else "restricted-icons=${enabledTargets.keys.joinToString()}",
                 )
                 return
             }
@@ -192,12 +202,12 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             val density = resources.displayMetrics.density
             val adjusted = if (detection.overlayBounds != null) {
                 IntBounds(
-                    left = (rawBounds.left + (settings.horizontalInsetDp * density).toInt()).coerceIn(screen.left, screen.right),
-                    top = (rawBounds.top + (settings.topOffsetDp * density).toInt()).coerceIn(rawBounds.top, rawBounds.bottom),
-                    right = (rawBounds.right - (settings.horizontalInsetDp * density).toInt()).coerceIn(screen.left, screen.right),
+                    left = rawBounds.left,
+                    top = rawBounds.top,
+                    right = rawBounds.right,
                     bottom = (
                         rawBounds.bottom +
-                            ((BASE_BOTTOM_EXTENSION_DP + settings.bottomOffsetDp) * density).toInt()
+                            (BASE_BOTTOM_EXTENSION_DP * density).toInt()
                         ).coerceIn(rawBounds.top, screen.bottom),
                 )
             } else {
@@ -208,9 +218,9 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
                 return
             }
 
-            overlayController.show(adjusted, settings)
-            lastHiddenReason = null
             val mode = if (detection.overlayBounds != null) "home-content" else "blocked-tab"
+            overlayController.show(adjusted, settings, mode)
+            lastHiddenReason = null
             val status = "表示中 mode=$mode bounds=[${adjusted.left},${adjusted.top}][${adjusted.right},${adjusted.bottom}] trigger=$trigger"
             Log.i(TAG, "overlay_show $status")
         } catch (error: Throwable) {
@@ -228,6 +238,24 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             IntBounds(0, 0, metrics.widthPixels, metrics.heightPixels)
         }
     }
+
+    private fun scheduleScrollSettleEvaluation() {
+        scrollSettleRunnable?.let(handler::removeCallbacks)
+        scrollSettleRunnable = Runnable {
+            scrollSettleRunnable = null
+            scheduleEvaluation("scroll-settled")
+        }
+        handler.postDelayed(scrollSettleRunnable!!, SCROLL_SETTLE_DELAY_MS)
+    }
+
+    private fun isTargetEnabled(name: String, settings: InspectorPreferences.OverlaySettings): Boolean =
+        when (name) {
+            "friends-header" -> settings.showFriendsOverlay
+            "agent-header", "agent-floating", "agent-conversation" -> settings.showAgentOverlay
+            "shopping-tab" -> settings.showShoppingOverlay
+            "mini-app-tab" -> settings.showAppOverlay
+            else -> true
+        }
 
     private fun handleFastTabClick(event: AccessibilityEvent) {
         val eventLabels = buildList {
@@ -265,19 +293,16 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
         val screen = currentScreenBounds()
         val density = resources.displayMetrics.density
         val adjusted = IntBounds(
-            left = (rawBounds.left + (settings.horizontalInsetDp * density).toInt())
-                .coerceIn(screen.left, screen.right),
-            top = (rawBounds.top + (settings.topOffsetDp * density).toInt())
-                .coerceIn(rawBounds.top, rawBounds.bottom),
-            right = (rawBounds.right - (settings.horizontalInsetDp * density).toInt())
-                .coerceIn(screen.left, screen.right),
+            left = rawBounds.left,
+            top = rawBounds.top,
+            right = rawBounds.right,
             bottom = (
                 rawBounds.bottom +
-                    ((BASE_BOTTOM_EXTENSION_DP + settings.bottomOffsetDp) * density).toInt()
+                    (BASE_BOTTOM_EXTENSION_DP * density).toInt()
                 ).coerceIn(rawBounds.top, screen.bottom),
         )
         if (adjusted.width <= 0 || adjusted.height <= 0) return
-        overlayController.show(adjusted, settings)
+        overlayController.show(adjusted, settings, "home-content")
         lastHiddenReason = null
         Log.i(TAG, "overlay_show fast-home-tab-click bounds=$adjusted")
     }
@@ -328,7 +353,9 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
 
     private fun cancelEvaluation() {
         evaluationRunnable?.let(handler::removeCallbacks)
+        scrollSettleRunnable?.let(handler::removeCallbacks)
         evaluationRunnable = null
+        scrollSettleRunnable = null
         pendingEvaluationReason = null
     }
 
@@ -363,7 +390,6 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             val directory = File(filesDir, "ui-trees").apply { mkdirs() }
             val file = File(directory, "ui-tree-latest.txt")
             file.writeText(output.toString())
-            InspectorPreferences.setLastTreePath(this, file.absolutePath)
             InspectorPreferences.markDumpHandled(this, request)
             Log.i(TAG, "dump_end request=$request file=${file.absolutePath}")
         }
@@ -432,6 +458,7 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             "jp.naver.line.android:id/bnb_mini",
         )
         private const val MIN_EVALUATION_INTERVAL_MS = 16L
+        private const val SCROLL_SETTLE_DELAY_MS = 300L
         private const val DUMP_DEBOUNCE_MS = 350L
         private const val WATCHDOG_INTERVAL_MS = 250L
         private const val MAX_DEPTH = 80
