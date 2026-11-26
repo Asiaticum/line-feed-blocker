@@ -25,7 +25,13 @@ class OverlayController(private val service: AccessibilityService) {
             screen,
             minimumSize,
         )
-        if (displayed.width <= 0 || displayed.height <= 0) {
+        show(displayed) { it.applySettings(settings) }
+    }
+
+    fun showBrowserBlock(bounds: IntBounds) = show(bounds, OverlayView::showBrowserBlock)
+
+    private fun show(bounds: IntBounds, configure: (OverlayView) -> Unit) {
+        if (bounds.width <= 0 || bounds.height <= 0) {
             hide()
             return
         }
@@ -34,7 +40,7 @@ class OverlayController(private val service: AccessibilityService) {
         val view = if (current == null) {
             OverlayView(service).also {
                 try {
-                    windowManager.addView(it, layoutParameters(displayed))
+                    windowManager.addView(it, layoutParameters(bounds))
                     overlayView = it
                 } catch (error: Throwable) {
                     overlayView = null
@@ -45,8 +51,8 @@ class OverlayController(private val service: AccessibilityService) {
             current
         }
 
-        view.applySettings(settings)
-        windowManager.updateViewLayout(view, layoutParameters(displayed))
+        configure(view)
+        windowManager.updateViewLayout(view, layoutParameters(bounds))
         view.visibility = View.VISIBLE
         visible = true
     }

@@ -21,6 +21,7 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
     private lateinit var overlayController: OverlayController
     private lateinit var touchBlockerController: TouchBlockerController
     private var lastForegroundPackage: String? = null
+    private var inAppBrowserWindowId: Int? = null
     private var lastHiddenReason: String? = null
     private var evaluationRunnable: Runnable? = null
     private var pendingEvaluationReason: String? = null
@@ -84,6 +85,14 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             }
 
             handleInspectorRequest(event.eventType)
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val className = event.className?.toString()
+                if (className == InAppBrowserDetector.ACTIVITY_CLASS) {
+                    inAppBrowserWindowId = event.windowId
+                } else if (className?.endsWith("Activity") == true && inAppBrowserWindowId == event.windowId) {
+                    inAppBrowserWindowId = null
+                }
+            }
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 handleFastTabClick(event)
             }
@@ -175,7 +184,16 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             }
 
             val screen = currentScreenBounds()
+            if (settings.blockInAppBrowser && root.windowId == inAppBrowserWindowId) {
+                val bounds = Rect().also(root::getBoundsInScreen)
+                blockInAppBrowser(IntBounds(bounds.left, bounds.top, bounds.right, bounds.bottom), screen)
+                return
+            }
             val snapshot = UiNodeSnapshot.from(root)
+            if (settings.blockInAppBrowser && InAppBrowserDetector.hasBrowserControls(snapshot)) {
+                blockInAppBrowser(snapshot.bounds, screen)
+                return
+            }
             val policy = NavigationPolicyDetector.detect(snapshot, screen)
             val enabledTargets = policy.touchBlockers.filterKeys { isTargetEnabled(it, settings) }
             touchBlockerController.sync(enabledTargets, settings)
@@ -227,6 +245,19 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
             hideOverlay("evaluation-exception")
             Log.e(TAG, "evaluation_failed trigger=$trigger", error)
         }
+    }
+
+    private fun blockInAppBrowser(bounds: IntBounds, screen: IntBounds) {
+        touchBlockerController.hideAll()
+        overlayController.showBrowserBlock(
+            IntBounds(
+                maxOf(bounds.left, screen.left),
+                maxOf(bounds.top, screen.top),
+                minOf(bounds.right, screen.right),
+                minOf(bounds.bottom, screen.bottom),
+            ),
+        )
+        lastHiddenReason = null
     }
 
     private fun currentScreenBounds(): IntBounds {
@@ -360,6 +391,7 @@ class LineInspectorService : AccessibilityService(), SharedPreferences.OnSharedP
     }
 
     private fun stopServiceWork(reason: String) {
+        inAppBrowserWindowId = null
         cancelEvaluation()
         cancelPendingDump()
         handler.removeCallbacks(watchdog)

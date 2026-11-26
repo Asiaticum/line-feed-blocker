@@ -68,6 +68,9 @@ class MainActivity : Activity() {
         content.addView(checkBox(R.string.show_app_overlay, settings.showAppOverlay) {
             InspectorPreferences.setShowAppOverlay(this, it)
         }, matchWrap())
+        content.addView(checkBox(R.string.block_in_app_browser, settings.blockInAppBrowser) {
+            InspectorPreferences.setBlockInAppBrowser(this, it)
+        }, matchWrap())
 
         section(content, R.string.section_appearance)
         val opacityValue = label(getString(R.string.opacity_value, settings.opacityPercent), 14f)

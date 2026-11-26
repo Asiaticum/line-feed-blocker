@@ -21,6 +21,7 @@ object InspectorPreferences {
     private const val KEY_SHOW_AGENT_OVERLAY = "show_agent_overlay"
     private const val KEY_SHOW_SHOPPING_OVERLAY = "show_shopping_overlay"
     private const val KEY_SHOW_APP_OVERLAY = "show_app_overlay"
+    private const val KEY_BLOCK_IN_APP_BROWSER = "block_in_app_browser"
     private const val KEY_ADJUSTMENT_TARGET = "adjustment_target"
     private const val KEY_DEBUG_OPTIONS_VISIBLE = "debug_options_visible"
     private const val KEY_SAVED_SETTINGS = "saved_settings_json"
@@ -34,6 +35,7 @@ object InspectorPreferences {
         KEY_SHOW_AGENT_OVERLAY,
         KEY_SHOW_SHOPPING_OVERLAY,
         KEY_SHOW_APP_OVERLAY,
+        KEY_BLOCK_IN_APP_BROWSER,
         KEY_ADJUSTMENT_TARGET,
     )
 
@@ -45,6 +47,7 @@ object InspectorPreferences {
         val showAgentOverlay: Boolean,
         val showShoppingOverlay: Boolean,
         val showAppOverlay: Boolean,
+        val blockInAppBrowser: Boolean,
         val adjustmentTarget: String,
     )
 
@@ -80,6 +83,7 @@ object InspectorPreferences {
             showAgentOverlay = preferences.getBoolean(KEY_SHOW_AGENT_OVERLAY, true),
             showShoppingOverlay = preferences.getBoolean(KEY_SHOW_SHOPPING_OVERLAY, true),
             showAppOverlay = preferences.getBoolean(KEY_SHOW_APP_OVERLAY, true),
+            blockInAppBrowser = preferences.getBoolean(KEY_BLOCK_IN_APP_BROWSER, true),
             adjustmentTarget = preferences.getString(KEY_ADJUSTMENT_TARGET, TARGET_HOME_FEED)
                 ?: TARGET_HOME_FEED,
         )
@@ -105,6 +109,9 @@ object InspectorPreferences {
 
     fun setShowAppOverlay(context: Context, value: Boolean) =
         preferences(context).edit().putBoolean(KEY_SHOW_APP_OVERLAY, value).apply()
+
+    fun setBlockInAppBrowser(context: Context, value: Boolean) =
+        preferences(context).edit().putBoolean(KEY_BLOCK_IN_APP_BROWSER, value).apply()
 
     fun setAdjustmentTarget(context: Context, value: String) =
         preferences(context).edit().putString(KEY_ADJUSTMENT_TARGET, value).apply()

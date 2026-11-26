@@ -15,6 +15,8 @@
     <string name="show_agent_overlay">Agent iを隠す</string>
     <string name="show_shopping_overlay">ショッピングを隠す</string>
     <string name="show_app_overlay">アプリを隠す</string>
+    <string name="block_in_app_browser">LINE内ブラウザをブロックする</string>
+    <string name="in_app_browser_blocked">LINE内ブラウザはブロックされています。\nAndroidの「戻る」で前の画面に戻れます。</string>
     <string name="section_appearance">オーバーレイの見た目</string>
     <string name="opacity_value">不透明度: %1$d%%</string>
     <string name="background_color">背景色</string>
